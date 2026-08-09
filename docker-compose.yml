@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_BASE_URL: http://localhost:8000
+      DATABASE_PATH: data/social-studio.db
+      ARTIFACT_DIR: artifacts
+      FAKE_PLATFORM_BASE_URL: http://localhost:8000/fake
+      WORKER_POLL_SECONDS: 1
+      ENABLE_WORKER: "true"
+    volumes:
+      - social-data:/app/data
+      - social-artifacts:/app/artifacts
+volumes:
+  social-data:
+  social-artifacts:
+
