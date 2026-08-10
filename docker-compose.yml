@@ -4,16 +4,24 @@ services:
     ports:
       - "8000:8000"
     environment:
-      APP_BASE_URL: http://localhost:8000
+      APP_BASE_URL: http://app:8000
       DATABASE_PATH: data/social-studio.db
       ARTIFACT_DIR: artifacts
-      FAKE_PLATFORM_BASE_URL: http://localhost:8000/fake
+      FAKE_PLATFORM_BASE_URL: http://fake-platform:8001/fake
+      API_KEY: development-api-key
       WORKER_POLL_SECONDS: 1
       ENABLE_WORKER: "true"
     volumes:
       - social-data:/app/data
       - social-artifacts:/app/artifacts
+  fake-platform:
+    build: .
+    command: uvicorn app.fake_platform_service:app --host 0.0.0.0 --port 8001
+    environment:
+      APP_BASE_URL: http://app:8000
+      DATABASE_PATH: data/social-studio.db
+    volumes:
+      - social-data:/app/data
 volumes:
   social-data:
   social-artifacts:
-

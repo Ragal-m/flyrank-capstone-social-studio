@@ -16,7 +16,7 @@ Blog post -> caption composer -> Instagram/X captions
                               -> SocialPublisher interface
                                  -> Instagram adapter
                                  -> X adapter
-                              -> fake platform
+                              -> separate fake-platform service
                               -> signed webhook -> verified status
 ```
 
@@ -32,6 +32,8 @@ your own local secrets, copy `.env.example` to `.env`, generate a 32-byte
 base64 encryption key, and pass the values through your environment.
 
 Open `http://localhost:8000/docs` for the API.
+Send `X-API-Key: development-api-key` with campaign and alert requests. The
+value is a local demo default and must be replaced outside the sandbox.
 
 ## Demo flow
 
@@ -43,6 +45,14 @@ Open `http://localhost:8000/docs` for the API.
    `POST /fake/control/rate-limit/x` and watch the safe retry.
 5. Send a forged delivery webhook and receive 400; use a correctly signed
    event and watch the post become published.
+6. Inspect terminal worker failures with authenticated `GET /alerts`.
+
+## Persistence and tenancy
+
+Schema version 1 is recorded in `schema_migrations`. Campaigns, posts, tokens,
+indexes, and failure alerts carry the configured tenant identity. Every
+campaign read and write is scoped to that tenant. Terminal background failures
+are stored as durable alerts after the configured retry limit.
 
 ## Tests
 
@@ -58,4 +68,3 @@ platform. The worker is single-node and SQLite-backed; a multi-node deployment
 would replace its claim transaction with a database queue such as PostgreSQL
 `SKIP LOCKED`. Caption generation is deterministic so the project needs no
 paid model or API key.
-

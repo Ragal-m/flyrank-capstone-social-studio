@@ -9,5 +9,6 @@ endpoints:
   publish_now: POST /campaigns/{campaign_id}/publish
   delivery_webhook: POST /webhook/social-delivery
   fake_rate_limit: POST /fake/control/rate-limit/{platform}
-
-
+  failure_alerts: GET /alerts
+headers:
+  X-API-Key: development-api-key

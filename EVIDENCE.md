@@ -26,6 +26,11 @@ does not affect behavior.
 | Crash recovery | `test_expired_worker_lease_is_reclaimed_without_changing_key` proves an expired job is reclaimed with its original key. |
 | Forged webhook rejection | `test_forged_webhook_is_rejected_and_valid_webhook_updates_status` proves 400 plus unchanged state, then verified publication. |
 | Modified payload rejection | `test_modified_signed_body_is_rejected` proves a signature cannot be reused for changed content. |
+| Authorization boundary | `test_campaign_endpoints_require_authorization` proves missing API credentials receive 401. |
+| Tenant isolation | Tenant identity is stored and indexed on campaigns, posts, tokens, and failure alerts; all campaign queries include it. |
+| Durable failure alert | `test_terminal_worker_failure_creates_alert` proves exhausted work produces a persistent operator-visible alert. |
+| Separate fake server | Docker Compose runs `app.fake_platform_service:app` as an independent service on port 8001. |
+| Schema migration | Startup records schema version 1 in `schema_migrations` and applies idempotently. |
 
 ## Submission-pack checks
 
@@ -34,4 +39,3 @@ does not affect behavior.
 - `.env.example` lists every configurable value without real credentials.
 - `BUILDLOG.md` records AI assistance and corrections honestly.
 - The fake platform is included; no real social account is contacted.
-
