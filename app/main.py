@@ -1,12 +1,11 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 
 from .db import migrate
-from .fake_platform import router as fake_platform_router
-from .models import CampaignCreate, CampaignView, DeliveryEvent
-from .repository import apply_delivery_event, queue_campaign_now, save_token
+from .models import CampaignCreate, CampaignView, DeliveryEvent, FailureAlert
+from .repository import apply_delivery_event, failure_alerts, queue_campaign_now, save_token
 from .security import encrypt_token, fresh_timestamp, verify_signature
 from .service import create_campaign, get_campaign
 from .settings import get_settings
@@ -29,7 +28,11 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="FlyRank Social Studio", version="1.0.0", lifespan=lifespan)
-app.include_router(fake_platform_router)
+
+
+def authorize(x_api_key: str = Header(default="")) -> None:
+    if x_api_key != get_settings().api_key:
+        raise HTTPException(status_code=401, detail="invalid API key")
 
 
 @app.get("/health")
@@ -37,12 +40,12 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/campaigns", response_model=CampaignView, status_code=status.HTTP_201_CREATED)
+@app.post("/campaigns", response_model=CampaignView, status_code=status.HTTP_201_CREATED, dependencies=[Depends(authorize)])
 def create_campaign_route(data: CampaignCreate) -> CampaignView:
     return create_campaign(data)
 
 
-@app.get("/campaigns/{campaign_id}", response_model=CampaignView)
+@app.get("/campaigns/{campaign_id}", response_model=CampaignView, dependencies=[Depends(authorize)])
 def campaign_route(campaign_id: str) -> CampaignView:
     try:
         return get_campaign(campaign_id)
@@ -50,7 +53,7 @@ def campaign_route(campaign_id: str) -> CampaignView:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@app.post("/campaigns/{campaign_id}/publish", status_code=status.HTTP_202_ACCEPTED)
+@app.post("/campaigns/{campaign_id}/publish", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(authorize)])
 def publish_campaign_route(campaign_id: str) -> dict:
     try:
         get_campaign(campaign_id)
@@ -85,3 +88,6 @@ async def delivery_webhook(
     return {"accepted": applied}
 
 
+@app.get("/alerts", response_model=list[FailureAlert], dependencies=[Depends(authorize)])
+def alerts_route() -> list[dict]:
+    return failure_alerts()

@@ -7,6 +7,7 @@ from .publishers import FakeInstagramPublisher, FakeXPublisher, PublishRequest
 from .repository import (
     claim_due_post,
     encrypted_token,
+    fail_post,
     record_platform_acceptance,
     reschedule_post,
 )
@@ -39,8 +40,11 @@ async def process_due_once(client: httpx.AsyncClient | None = None) -> bool:
         result = await publisher_for(post["platform"], client).publish(request)
         record_platform_acceptance(post["id"], result.platform_post_id)
     except Exception as error:
-        delay = min(2 ** min(post["attempts"], 6), 60)
-        reschedule_post(post["id"], str(error), delay)
+        if post["attempts"] >= get_settings().max_worker_attempts:
+            fail_post(post["id"], post["tenant_id"], str(error))
+        else:
+            delay = min(2 ** min(post["attempts"], 6), 60)
+            reschedule_post(post["id"], str(error), delay)
     finally:
         if owns_client:
             await client.aclose()
@@ -58,5 +62,3 @@ async def worker_loop(stop: asyncio.Event) -> None:
                     )
                 except TimeoutError:
                     pass
-
-

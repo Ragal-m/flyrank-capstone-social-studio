@@ -38,6 +38,14 @@ class SocialPostEntry(BaseModel):
     error: str | None
 
 
+class FailureAlert(BaseModel):
+    id: str
+    tenant_id: str
+    post_id: str
+    message: str
+    created_at: datetime
+
+
 class CampaignView(BaseModel):
     id: str
     title: str
@@ -53,5 +61,3 @@ class DeliveryEvent(BaseModel):
     platform_post_id: str
     status: Literal["published", "failed"]
     timestamp: int
-
-

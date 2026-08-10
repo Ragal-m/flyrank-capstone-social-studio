@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from .db import connect
 from .models import CampaignCreate, Platform
+from .settings import get_settings
 
 
 def iso_now() -> str:
@@ -10,18 +11,20 @@ def iso_now() -> str:
 
 
 def save_token(platform: Platform, encrypted_value: str) -> None:
+    tenant_id = get_settings().default_tenant_id
     with connect() as connection:
         connection.execute(
-            "INSERT INTO tokens(platform, encrypted_value) VALUES(?, ?) "
-            "ON CONFLICT(platform) DO UPDATE SET encrypted_value=excluded.encrypted_value",
-            (platform, encrypted_value),
+            "INSERT INTO tokens(tenant_id,platform,encrypted_value) VALUES(?,?,?) "
+            "ON CONFLICT(tenant_id,platform) DO UPDATE SET encrypted_value=excluded.encrypted_value",
+            (tenant_id, platform, encrypted_value),
         )
 
 
 def encrypted_token(platform: Platform) -> str:
+    tenant_id = get_settings().default_tenant_id
     with connect() as connection:
         row = connection.execute(
-            "SELECT encrypted_value FROM tokens WHERE platform=?", (platform,)
+            "SELECT encrypted_value FROM tokens WHERE tenant_id=? AND platform=?", (tenant_id, platform)
         ).fetchone()
     if row is None:
         raise LookupError(f"token not found for {platform}")
@@ -34,22 +37,24 @@ def create_campaign_records(
     captions: dict[Platform, str],
     images: dict[Platform, str],
 ) -> None:
+    tenant_id = get_settings().default_tenant_id
     created_at = iso_now()
     scheduled_at = data.scheduled_at.isoformat()
     with connect() as connection:
         connection.execute(
-            "INSERT INTO campaigns(id,title,body,url,created_at) VALUES(?,?,?,?,?)",
-            (campaign_id, data.title, data.body, str(data.url), created_at),
+            "INSERT INTO campaigns(id,tenant_id,title,body,url,created_at) VALUES(?,?,?,?,?,?)",
+            (campaign_id, tenant_id, data.title, data.body, str(data.url), created_at),
         )
         for platform in ("instagram", "x"):
             post_id = str(uuid.uuid4())
             key = f"{campaign_id}:{platform}"
             connection.execute(
-                "INSERT INTO social_posts(id,campaign_id,platform,caption,image_path,status,"
-                "scheduled_at,idempotency_key,next_attempt_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO social_posts(id,campaign_id,tenant_id,platform,caption,image_path,status,"
+                "scheduled_at,idempotency_key,next_attempt_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     post_id,
                     campaign_id,
+                    tenant_id,
                     platform,
                     captions[platform],
                     images[platform],
@@ -62,16 +67,17 @@ def create_campaign_records(
 
 
 def campaign(campaign_id: str) -> dict | None:
+    tenant_id = get_settings().default_tenant_id
     with connect() as connection:
         root = connection.execute(
-            "SELECT * FROM campaigns WHERE id=?", (campaign_id,)
+            "SELECT * FROM campaigns WHERE id=? AND tenant_id=?", (campaign_id, tenant_id)
         ).fetchone()
         if root is None:
             return None
         posts = connection.execute(
             "SELECT id,campaign_id,platform,caption,image_path,status,scheduled_at,"
-            "platform_post_id,error FROM social_posts WHERE campaign_id=? ORDER BY platform",
-            (campaign_id,),
+            "platform_post_id,error FROM social_posts WHERE campaign_id=? AND tenant_id=? ORDER BY platform",
+            (campaign_id, tenant_id),
         ).fetchall()
     return {**dict(root), "posts": [dict(post) for post in posts]}
 
@@ -81,8 +87,8 @@ def queue_campaign_now(campaign_id: str) -> int:
     with connect() as connection:
         cursor = connection.execute(
             "UPDATE social_posts SET status='queued',next_attempt_at=?,lease_until=NULL "
-            "WHERE campaign_id=? AND status NOT IN ('published','failed')",
-            (now, campaign_id),
+            "WHERE campaign_id=? AND tenant_id=? AND status NOT IN ('published','failed')",
+            (now, campaign_id, get_settings().default_tenant_id),
         )
         return cursor.rowcount
 
@@ -127,6 +133,27 @@ def reschedule_post(post_id: str, error: str, delay_seconds: int) -> None:
             "WHERE id=?",
             (next_attempt, error[:500], post_id),
         )
+
+
+def fail_post(post_id: str, tenant_id: str, error: str) -> None:
+    with connect() as connection:
+        connection.execute(
+            "UPDATE social_posts SET status='failed',lease_until=NULL,error=? WHERE id=?",
+            (error[:500], post_id),
+        )
+        connection.execute(
+            "INSERT INTO failure_alerts(id,tenant_id,post_id,message,created_at) VALUES(?,?,?,?,?)",
+            (str(uuid.uuid4()), tenant_id, post_id, error[:500], iso_now()),
+        )
+
+
+def failure_alerts() -> list[dict]:
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT * FROM failure_alerts WHERE tenant_id=? ORDER BY created_at DESC",
+            (get_settings().default_tenant_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def apply_delivery_event(
@@ -206,5 +233,3 @@ def fake_post_count() -> int:
     with connect() as connection:
         row = connection.execute("SELECT COUNT(*) AS count FROM fake_posts").fetchone()
     return int(row["count"])
-
-

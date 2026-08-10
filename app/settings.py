@@ -12,10 +12,12 @@ class Settings(BaseSettings):
     fake_platform_base_url: str = "http://localhost:8000/fake"
     worker_poll_seconds: float = 1.0
     enable_worker: bool = True
+    api_key: str = "development-api-key"
+    default_tenant_id: str = "demo"
+    max_worker_attempts: int = 4
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

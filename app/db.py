@@ -8,8 +8,13 @@ from .settings import get_settings
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS campaigns (
     id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     url TEXT NOT NULL,
@@ -18,6 +23,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
 CREATE TABLE IF NOT EXISTS social_posts (
     id TEXT PRIMARY KEY,
     campaign_id TEXT NOT NULL REFERENCES campaigns(id),
+    tenant_id TEXT NOT NULL,
     platform TEXT NOT NULL,
     caption TEXT NOT NULL,
     image_path TEXT NOT NULL,
@@ -34,8 +40,10 @@ CREATE TABLE IF NOT EXISTS social_posts (
 CREATE INDEX IF NOT EXISTS social_posts_due
 ON social_posts(status, next_attempt_at, lease_until);
 CREATE TABLE IF NOT EXISTS tokens (
-    platform TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
     encrypted_value TEXT NOT NULL
+    ,PRIMARY KEY(tenant_id, platform)
 );
 CREATE TABLE IF NOT EXISTS webhook_events (
     event_id TEXT PRIMARY KEY,
@@ -53,6 +61,15 @@ CREATE TABLE IF NOT EXISTS fake_rate_limits (
     remaining INTEGER NOT NULL,
     retry_after INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS failure_alerts (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS campaigns_tenant ON campaigns(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS posts_tenant_due ON social_posts(tenant_id, status, next_attempt_at);
 """
 
 
@@ -77,5 +94,6 @@ def connect() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connect() as connection:
         connection.executescript(SCHEMA)
-
-
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,datetime('now'))"
+        )
