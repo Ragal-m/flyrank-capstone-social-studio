@@ -16,9 +16,9 @@ def isolated_environment(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("WEBHOOK_SECRET", "test-webhook-secret")
     monkeypatch.setenv("ENABLE_WORKER", "false")
+    monkeypatch.setenv("API_KEY", "test-api-key")
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "test-tenant")
     get_settings.cache_clear()
     migrate()
     yield
     get_settings.cache_clear()
-
-

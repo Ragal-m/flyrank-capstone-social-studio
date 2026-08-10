@@ -19,6 +19,9 @@ def campaign_payload():
     }
 
 
+AUTH = {"X-API-Key": "test-api-key"}
+
+
 def test_tokens_use_random_nonce_and_round_trip():
     first = encrypt_token("secret-token")
     second = encrypt_token("secret-token")
@@ -33,7 +36,7 @@ def test_tokens_use_random_nonce_and_round_trip():
 
 def test_forged_webhook_is_rejected_and_valid_webhook_updates_status():
     with TestClient(app) as client:
-        campaign = client.post("/campaigns", json=campaign_payload()).json()
+        campaign = client.post("/campaigns", json=campaign_payload(), headers=AUTH).json()
         event = {
             "event_id": str(uuid.uuid4()),
             "idempotency_key": f"{campaign['id']}:instagram",
@@ -48,7 +51,7 @@ def test_forged_webhook_is_rejected_and_valid_webhook_updates_status():
             headers={"X-Social-Signature": "forged"},
         )
         assert forged.status_code == 400
-        unchanged = client.get(f"/campaigns/{campaign['id']}").json()
+        unchanged = client.get(f"/campaigns/{campaign['id']}", headers=AUTH).json()
         instagram = next(p for p in unchanged["posts"] if p["platform"] == "instagram")
         assert instagram["status"] == "queued"
         valid = client.post(
@@ -57,7 +60,7 @@ def test_forged_webhook_is_rejected_and_valid_webhook_updates_status():
             headers={"X-Social-Signature": sign_payload(body)},
         )
         assert valid.status_code == 200
-        updated = client.get(f"/campaigns/{campaign['id']}").json()
+        updated = client.get(f"/campaigns/{campaign['id']}", headers=AUTH).json()
         instagram = next(p for p in updated["posts"] if p["platform"] == "instagram")
         assert instagram["status"] == "published"
 
@@ -80,4 +83,3 @@ def test_modified_signed_body_is_rejected():
             headers={"X-Social-Signature": signature},
         )
     assert response.status_code == 400
-
